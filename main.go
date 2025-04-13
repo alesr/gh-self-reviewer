@@ -96,22 +96,40 @@ func registerTools(ctx context.Context, server *mcp.Server, githubToolHandler *g
 		return fmt.Errorf("could not register list_my_pull_requests tool: %w", err)
 	}
 
-	log.Println("Registering tool: comment_on_pr")
+	log.Println("Registering tool: get_pr_content")
 
-	if err := server.RegisterTool("comment_on_pr", "Comment on a pull request",
-		func(arguments gh.PRCommentRequest) (*mcp.ToolResponse, error) {
-			comment, err := githubToolHandler.CommentOnPullRequestByURL(ctx, arguments.PRURL, arguments.Body)
+	if err := server.RegisterTool("get_pr_content", "Get content of a pull request",
+		func(arguments gh.PRReviewRequest) (*mcp.ToolResponse, error) {
+			content, err := githubToolHandler.GetPullRequestContents(ctx, arguments.PRURL)
 			if err != nil {
-				return nil, fmt.Errorf("could not comment on PR: %w", err)
+				return nil, fmt.Errorf("could not get PR content: %w", err)
 			}
 
-			commentJSON, err := json.Marshal(comment)
+			contentJSON, err := json.Marshal(content)
 			if err != nil {
-				return nil, fmt.Errorf("could not marshal PR comment: %w", err)
+				return nil, fmt.Errorf("could not marshal PR content: %w", err)
 			}
-			return mcp.NewToolResponse(mcp.NewTextContent(string(commentJSON))), nil
+			return mcp.NewToolResponse(mcp.NewTextContent(string(contentJSON))), nil
 		}); err != nil {
-		return fmt.Errorf("could not register comment_on_pr tool: %w", err)
+		return fmt.Errorf("could not register get_pr_content tool: %w", err)
+	}
+
+	log.Println("Registering tool: review_pr")
+
+	if err := server.RegisterTool("review_pr", "Submit a review on a pull request",
+		func(arguments gh.PRReviewSubmitRequest) (*mcp.ToolResponse, error) {
+			review, err := githubToolHandler.SubmitPullRequestReview(ctx, arguments.PRURL, arguments.ReviewBody)
+			if err != nil {
+				return nil, fmt.Errorf("could not submit PR review: %w", err)
+			}
+
+			reviewJSON, err := json.Marshal(review)
+			if err != nil {
+				return nil, fmt.Errorf("could not marshal PR review: %w", err)
+			}
+			return mcp.NewToolResponse(mcp.NewTextContent(string(reviewJSON))), nil
+		}); err != nil {
+		return fmt.Errorf("could not register review_pr tool: %w", err)
 	}
 	return nil
 }
