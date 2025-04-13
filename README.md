@@ -1,4 +1,5 @@
 # gh-self-reviewer
+[![Go Report Card](https://goreportcard.com/badge/github.com/alesr/gh-self-reviewer)](https://goreportcard.com/report/github.com/alesr/gh-self-reviewer)
 
 A Go-based Anthropic MCP server that helps developers self-review their GitHub pull requests.
 
