@@ -17,6 +17,9 @@ import (
 )
 
 func main() {
+	log.SetOutput(os.Stderr)
+	log.Println("Starting gh-self-reviewer...")
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -29,47 +32,54 @@ func main() {
 	}()
 
 	if err := run(ctx); err != nil {
-		log.Fatalf("Error: %v", err)
+		log.Printf("Error: %v", err)
+		os.Exit(1)
 	}
 }
 
 func run(ctx context.Context) error {
+	token := os.Getenv("GITHUB_TOKEN_MCP_APP_REVIEW")
+	if token == "" {
+		return fmt.Errorf("GITHUB_TOKEN_MCP_APP_REVIEW environment variable is not set")
+	}
+
 	githubClient, err := makeGitHubClient(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize GitHub client: %w", err)
 	}
 
 	server := mcp.NewServer(stdio.NewStdioServerTransport())
+	log.Println("MCP server created")
 
-	githubToolHandler := gh.NewGithubToolHandler(githubClient)
-	if err := registerTools(ctx, server, githubToolHandler); err != nil {
+	if err := registerTools(ctx, server, gh.NewGithubToolHandler(githubClient)); err != nil {
 		return fmt.Errorf("could not register tools: %w", err)
 	}
 
-	log.Println("Starting MCP server...")
+	log.Println("Tools registered successfully")
 
-	if err := server.Serve(); err != nil {
-		return fmt.Errorf("could not serve MCP server: %w", err)
-	}
+	go func() {
+		log.Println("Server Serve() started")
+		if err := server.Serve(); err != nil {
+			log.Printf("MCP server error: %v", err)
+		}
+	}()
+
+	<-ctx.Done()
+
+	log.Println("Context canceled, shutting down server")
 	return nil
 }
 
 func makeGitHubClient(ctx context.Context) (*github.Client, error) {
 	token := os.Getenv("GITHUB_TOKEN_MCP_APP_REVIEW")
-	if token == "" {
-		return nil, fmt.Errorf("GITHUB_TOKEN_MCP_APP_REVIEW environment variable is required")
-	}
-	return github.NewClient(
-		oauth2.NewClient(
-			ctx,
-			oauth2.StaticTokenSource(
-				&oauth2.Token{AccessToken: token},
-			),
-		),
-	), nil
+	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
+	tc := oauth2.NewClient(ctx, ts)
+	return github.NewClient(tc), nil
 }
 
 func registerTools(ctx context.Context, server *mcp.Server, githubToolHandler *gh.GithubToolHandler) error {
+	log.Println("Registering tool: list_my_pull_requests")
+
 	if err := server.RegisterTool("list_my_pull_requests", "List my pull requests",
 		func(arguments gh.PRListRequest) (*mcp.ToolResponse, error) {
 			prs, err := githubToolHandler.ListMyOpenPullRequestsAcrossRepos(ctx)
@@ -85,6 +95,8 @@ func registerTools(ctx context.Context, server *mcp.Server, githubToolHandler *g
 		}); err != nil {
 		return fmt.Errorf("could not register list_my_pull_requests tool: %w", err)
 	}
+
+	log.Println("Registering tool: comment_on_pr")
 
 	if err := server.RegisterTool("comment_on_pr", "Comment on a pull request",
 		func(arguments gh.PRCommentRequest) (*mcp.ToolResponse, error) {
